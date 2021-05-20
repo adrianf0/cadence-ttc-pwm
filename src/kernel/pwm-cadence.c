@@ -30,31 +30,31 @@
 /* Register description (from section 8.5) */
 
 enum cpwm_register {
-	CPWM_CLK_CTRL			= 0,
-	CPWM_COUNTER_CTRL		= 1,
-	CPWM_COUNTER_VALUE		= 2,
-	CPWM_INTERVAL_COUNTER		= 3,
-	CPWM_MATCH_1_COUNTER		= 4,
-	CPWM_MATCH_2_COUNTER		= 5,
-	CPWM_MATCH_3_COUNTER		= 6,
-	CPWM_INTERRUPT_REGISTER		= 7,
-	CPWM_INTERRUPT_ENABLE		= 8,
-	CPWM_EVENT_CONTROL_TIMER	= 9,
-	CPWM_EVENT_REGISTER		= 10
+	CPWM_CLK_CTRL = 0,
+	CPWM_COUNTER_CTRL = 1,
+	CPWM_COUNTER_VALUE = 2,
+	CPWM_INTERVAL_COUNTER = 3,
+	CPWM_MATCH_1_COUNTER = 4,
+	CPWM_MATCH_2_COUNTER = 5,
+	CPWM_MATCH_3_COUNTER = 6,
+	CPWM_INTERRUPT_REGISTER = 7,
+	CPWM_INTERRUPT_ENABLE = 8,
+	CPWM_EVENT_CONTROL_TIMER = 9,
+	CPWM_EVENT_REGISTER = 10
 };
 
-static const char * cpwm_register_names[] = {
-	[CPWM_CLK_CTRL] 		= "CLK_CTRL",
-	[CPWM_COUNTER_CTRL] 		= "COUNTER_CTRL",
-	[CPWM_COUNTER_VALUE] 		= "COUNTER_VALUE",
-	[CPWM_INTERVAL_COUNTER] 	= "INTERVAL_COUNTER",
-	[CPWM_MATCH_1_COUNTER] 		= "MATCH_1_COUNTER",
-	[CPWM_MATCH_2_COUNTER] 		= "MATCH_2_COUNTER",
-	[CPWM_MATCH_3_COUNTER] 		= "MATCH_3_COUNTER",
-	[CPWM_INTERRUPT_REGISTER] 	= "INTERRUPT_REGISTER",
-	[CPWM_INTERRUPT_ENABLE]		= "INTERRUPT_ENABLE",
-	[CPWM_EVENT_CONTROL_TIMER]	= "EVENT_CONTROL_TIMER",
-	[CPWM_EVENT_REGISTER] 		= "EVENT_REGISTER",
+static const char *cpwm_register_names[] = {
+	[CPWM_CLK_CTRL] = "CLK_CTRL",
+	[CPWM_COUNTER_CTRL] = "COUNTER_CTRL",
+	[CPWM_COUNTER_VALUE] = "COUNTER_VALUE",
+	[CPWM_INTERVAL_COUNTER] = "INTERVAL_COUNTER",
+	[CPWM_MATCH_1_COUNTER] = "MATCH_1_COUNTER",
+	[CPWM_MATCH_2_COUNTER] = "MATCH_2_COUNTER",
+	[CPWM_MATCH_3_COUNTER] = "MATCH_3_COUNTER",
+	[CPWM_INTERRUPT_REGISTER] = "INTERRUPT_REGISTER",
+	[CPWM_INTERRUPT_ENABLE] = "INTERRUPT_ENABLE",
+	[CPWM_EVENT_CONTROL_TIMER] = "EVENT_CONTROL_TIMER",
+	[CPWM_EVENT_REGISTER] = "EVENT_REGISTER",
 };
 
 #define CPWM_CLK_FALLING_EDGE 0x40
@@ -99,31 +99,29 @@ static inline struct cadence_pwm_chip *cadence_pwm_get(struct pwm_chip *chip)
 	return container_of(chip, struct cadence_pwm_chip, chip);
 }
 
-static inline volatile __iomem uint32_t *cpwm_register_address(
-	struct cadence_pwm_chip *cpwm, int pwm, enum cpwm_register reg)
+static inline volatile __iomem uint32_t *
+cpwm_register_address(struct cadence_pwm_chip *cpwm, int pwm,
+		      enum cpwm_register reg)
 {
-	return (uint32_t *) (4 * (3 * reg + pwm) +
-		(char *) cpwm->base);
+	return (uint32_t *)(4 * (3 * reg + pwm) + (char *)cpwm->base);
 }
 
 static uint32_t cpwm_read(struct cadence_pwm_chip *cpwm, int pwm,
-	enum cpwm_register reg)
+			  enum cpwm_register reg)
 {
 	uint32_t x;
 
 	x = ioread32(cpwm_register_address(cpwm, pwm, reg));
-	dev_dbg(cpwm->chip.dev,
-                "read  %08x from %p:%d register %s",
-		x, cpwm, pwm, cpwm_register_names[reg]);
+	dev_dbg(cpwm->chip.dev, "read  %08x from %p:%d register %s", x, cpwm,
+		pwm, cpwm_register_names[reg]);
 	return x;
 }
 
 static void cpwm_write(struct cadence_pwm_chip *cpwm, int pwm,
-	enum cpwm_register reg, uint32_t value)
+		       enum cpwm_register reg, uint32_t value)
 {
-	dev_dbg(cpwm->chip.dev,
-                "write %08x  to  %p:%d register %s",
-		value, cpwm, pwm, cpwm_register_names[reg]);
+	dev_dbg(cpwm->chip.dev, "write %08x  to  %p:%d register %s", value,
+		cpwm, pwm, cpwm_register_names[reg]);
 	iowrite32(value, cpwm_register_address(cpwm, pwm, reg));
 }
 
@@ -131,8 +129,8 @@ static void cpwm_write(struct cadence_pwm_chip *cpwm, int pwm,
  * when the count matches the value in the match 0 register." - [ttcps_v2_0]
  */
 
-static int cadence_pwm_config(struct pwm_chip *chip,
-	struct pwm_device *pwm, int duty_ns, int period_ns)
+static int cadence_pwm_config(struct pwm_chip *chip, struct pwm_device *pwm,
+			      int duty_ns, int period_ns)
 {
 	struct cadence_pwm_chip *cpwm = cadence_pwm_get(chip);
 	int h = pwm->hwpwm;
@@ -140,8 +138,8 @@ static int cadence_pwm_config(struct pwm_chip *chip,
 	int period_clocks, duty_clocks, prescaler;
 	int ret;
 
-	dev_dbg(chip->dev, "configuring %p/%s(%d), %d/%d ns",
-		cpwm, pwm->label, h, duty_ns, period_ns);
+	dev_dbg(chip->dev, "configuring %p/%s(%d), %d/%d ns", cpwm, pwm->label,
+		h, duty_ns, period_ns);
 
 	ret = clk_prepare_enable(cpwm->pwms[h].clk);
 	if (ret) {
@@ -155,7 +153,7 @@ static int cadence_pwm_config(struct pwm_chip *chip,
 	/* Make sure counter is stopped */
 	counter_ctrl = cpwm_read(cpwm, h, CPWM_COUNTER_CTRL);
 	cpwm_write(cpwm, h, CPWM_COUNTER_CTRL,
-		counter_ctrl | CPWM_COUNTER_CTRL_COUNTING_DISABLE);
+		   counter_ctrl | CPWM_COUNTER_CTRL_COUNTING_DISABLE);
 
 	/* Calculate period, prescaler and set clock control register */
 	period_clocks = div64_u64(
@@ -163,7 +161,8 @@ static int cadence_pwm_config(struct pwm_chip *chip,
 		1000000000LL);
 
 	prescaler = ilog2(period_clocks) + 1 - 16;
-	if (prescaler < 0) prescaler = 0;
+	if (prescaler < 0)
+		prescaler = 0;
 
 	x = cpwm_read(cpwm, h, CPWM_CLK_CTRL);
 
@@ -172,12 +171,14 @@ static int cadence_pwm_config(struct pwm_chip *chip,
 	else {
 		x &= ~CPWM_CLK_PRESCALE_MASK;
 		x |= CPWM_CLK_PRESCALE_ENABLE |
-			(((prescaler - 1) << CPWM_CLK_PRESCALE_SHIFT) &
-			CPWM_CLK_PRESCALE_MASK);
+		     (((prescaler - 1) << CPWM_CLK_PRESCALE_SHIFT) &
+		      CPWM_CLK_PRESCALE_MASK);
 	};
 
-	if (cpwm->pwms[h].useExternalClk) x |= CPWM_CLK_SRC_EXTERNAL;
-	else x &= ~CPWM_CLK_SRC_EXTERNAL;
+	if (cpwm->pwms[h].useExternalClk)
+		x |= CPWM_CLK_SRC_EXTERNAL;
+	else
+		x &= ~CPWM_CLK_SRC_EXTERNAL;
 
 	cpwm_write(cpwm, h, CPWM_CLK_CTRL, x);
 
@@ -187,27 +188,25 @@ static int cadence_pwm_config(struct pwm_chip *chip,
 		1000000000LL);
 
 	cpwm_write(cpwm, h, CPWM_INTERVAL_COUNTER,
-		(period_clocks >> prescaler) & 0xffff);
+		   (period_clocks >> prescaler) & 0xffff);
 	cpwm_write(cpwm, h, CPWM_MATCH_1_COUNTER,
-		(duty_clocks >> prescaler) & 0xffff);
+		   (duty_clocks >> prescaler) & 0xffff);
 
 	/* Restore counter */
-	counter_ctrl &=
-		~CPWM_COUNTER_CTRL_DECREMENT_ENABLE;
+	counter_ctrl &= ~CPWM_COUNTER_CTRL_DECREMENT_ENABLE;
 	counter_ctrl |= CPWM_COUNTER_CTRL_INTERVAL_ENABLE |
 			CPWM_COUNTER_CTRL_RESET |
 			CPWM_COUNTER_CTRL_MATCH_ENABLE;
 
-	if(cpwm->pwms[h].polarity ==  PWM_POLARITY_NORMAL)
+	if (cpwm->pwms[h].polarity == PWM_POLARITY_NORMAL)
 		counter_ctrl |= CPWM_COUNTER_CTRL_WAVE_POL;
 	else
 		counter_ctrl &= ~CPWM_COUNTER_CTRL_WAVE_POL;
 
 	cpwm_write(cpwm, h, CPWM_COUNTER_CTRL, counter_ctrl);
 
-	dev_dbg(chip->dev,
-                "%d/%d clocks, prescaler 2^%d", duty_clocks, period_clocks,
-                prescaler);
+	dev_dbg(chip->dev, "%d/%d clocks, prescaler 2^%d", duty_clocks,
+		period_clocks, prescaler);
 
 	return 0;
 }
@@ -222,7 +221,7 @@ static void cadence_pwm_disable(struct pwm_chip *chip, struct pwm_device *pwm)
 
 	x = cpwm_read(cpwm, h, CPWM_COUNTER_CTRL);
 	x |= CPWM_COUNTER_CTRL_COUNTING_DISABLE |
-		CPWM_COUNTER_CTRL_WAVE_DISABLE;
+	     CPWM_COUNTER_CTRL_WAVE_DISABLE;
 	cpwm_write(cpwm, h, CPWM_COUNTER_CTRL, x);
 
 	clk_disable_unprepare(cpwm->pwms[h].clk);
@@ -245,26 +244,27 @@ static int cadence_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 
 	x = cpwm_read(cpwm, h, CPWM_COUNTER_CTRL);
 	x &= ~(CPWM_COUNTER_CTRL_COUNTING_DISABLE |
-		CPWM_COUNTER_CTRL_WAVE_DISABLE);
+	       CPWM_COUNTER_CTRL_WAVE_DISABLE);
 	x |= CPWM_COUNTER_CTRL_RESET;
 	cpwm_write(cpwm, h, CPWM_COUNTER_CTRL, x);
-	
+
 	return 0;
 }
 
-static int cadence_set_polarity(struct pwm_chip *chip, struct pwm_device *pwm, enum pwm_polarity polarity){
- 	struct cadence_pwm_chip *cpwm = cadence_pwm_get(chip);
+static int cadence_set_polarity(struct pwm_chip *chip, struct pwm_device *pwm,
+				enum pwm_polarity polarity)
+{
+	struct cadence_pwm_chip *cpwm = cadence_pwm_get(chip);
 	int h = pwm->hwpwm;
 	cpwm->pwms[h].polarity = polarity;
 	return 0;
 }
 
-
 static const struct pwm_ops cadence_pwm_ops = {
 	.config = cadence_pwm_config,
 	.enable = cadence_pwm_enable,
 	.disable = cadence_pwm_disable,
-	.set_polarity =  cadence_set_polarity,
+	.set_polarity = cadence_set_polarity,
 	.owner = THIS_MODULE,
 };
 
@@ -289,12 +289,12 @@ static int cadence_pwm_probe(struct platform_device *pdev)
 	//Try to get system clock
 	cpwm->system_clk = devm_clk_get(&pdev->dev, "system_clk");
 	if (IS_ERR(cpwm->system_clk))
-	  //Get the default clock
-	  cpwm->system_clk = devm_clk_get(&pdev->dev, NULL);
+		//Get the default clock
+		cpwm->system_clk = devm_clk_get(&pdev->dev, NULL);
 
-	if (IS_ERR(cpwm->system_clk)){
-	  dev_err(&pdev->dev, "Missing device clock");
-	  return -ENODEV;
+	if (IS_ERR(cpwm->system_clk)) {
+		dev_err(&pdev->dev, "Missing device clock");
+		return -ENODEV;
 	}
 
 	ret = clk_prepare_enable(cpwm->system_clk);
@@ -302,28 +302,28 @@ static int cadence_pwm_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Can't enable device clock.\n");
 		return ret;
 	}
-	
-	for (i = 0; i < CPWM_NUM_PWM; i ++) {
+
+	for (i = 0; i < CPWM_NUM_PWM; i++) {
 		pwm = cpwm->pwms + i;
-		snprintf(clockname, sizeof(clockname),
-			 "clock%d", i);
-		
+		snprintf(clockname, sizeof(clockname), "clock%d", i);
+
 		//Try to get a dedicated clock
 		pwm->clk = devm_clk_get(&pdev->dev, clockname);
 		if (IS_ERR(pwm->clk))
-		  //Get the default clock
-		  pwm->clk = devm_clk_get(&pdev->dev, NULL);
+			//Get the default clock
+			pwm->clk = devm_clk_get(&pdev->dev, NULL);
 
-		if (IS_ERR(pwm->clk)){
-		  dev_err(&pdev->dev, "Missing clock source for counter %d", i);
-		  ret  = -ENODEV;
-		  goto disable_system_clk;
+		if (IS_ERR(pwm->clk)) {
+			dev_err(&pdev->dev,
+				"Missing clock source for counter %d", i);
+			ret = -ENODEV;
+			goto disable_system_clk;
 		}
 
-		if( clk_is_match(pwm->clk, cpwm->system_clk) )
-		  pwm->useExternalClk = false;
+		if (clk_is_match(pwm->clk, cpwm->system_clk))
+			pwm->useExternalClk = false;
 		else
-		  pwm->useExternalClk = true;
+			pwm->useExternalClk = true;
 
 		pwm->polarity = PWM_POLARITY_NORMAL;
 	}
@@ -352,7 +352,7 @@ static int cadence_pwm_remove(struct platform_device *pdev)
 	struct cadence_pwm_chip *cpwm = platform_get_drvdata(pdev);
 	int i;
 
-	for (i = 0; i < cpwm->chip.npwm; i ++)
+	for (i = 0; i < cpwm->chip.npwm; i++)
 		pwm_disable(&cpwm->chip.pwms[i]);
 
 	clk_disable_unprepare(cpwm->system_clk);
