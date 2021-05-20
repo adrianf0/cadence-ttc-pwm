@@ -3,9 +3,11 @@
  * PWM driver for Cadence Triple Timer Counter (TTC) IPs
  *
  * Copyright (C) 2015 Xiphos Systems Corporation.
+ * Copyright (C) 2021 Fastree3D
  * Licensed under the GPL-2 or later.
  *
  * Author: Berke Durak <obd@xiphos.ca>
+ *         Adrian Fiergolski <Adrian.Fiergolski@fastree3d.com>
  *
  * Based in part on:
  *   pwm-lpc32xx.c
@@ -15,6 +17,7 @@
  *   [ttcps_v2_0] Xilinx bare-metal library source code
  */
 
+#include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/io.h>
 #include <linux/pwm.h>
@@ -78,14 +81,15 @@ passes through zero. The corresponding match interrupt is generated when the
 counter value equals one of the Match registers." [UG585] */
 
 struct cadence_pwm_pwm {
-	uint32_t clk_hz; /* Per-PWM clock frequency */
-	int source;      /* Per-PWM source */
+	struct clk *clk; // associated clock
+	bool useExternalClk; // internal/external clock switch
 };
 
 struct cadence_pwm_chip {
 	struct pwm_chip chip;
 	uint32_t hwaddr;
 	char __iomem *base;
+	struct clk *system_clk;
 	struct cadence_pwm_pwm pwms[CPWM_NUM_PWM];
 };
 
@@ -133,9 +137,16 @@ static int cadence_pwm_config(struct pwm_chip *chip,
 	int h = pwm->hwpwm;
 	uint32_t counter_ctrl, x;
 	int period_clocks, duty_clocks, prescaler;
+	int ret;
 
 	dev_dbg(chip->dev, "configuring %p/%s(%d), %d/%d ns",
 		cpwm, pwm->label, h, duty_ns, period_ns);
+
+	ret = clk_prepare_enable(cpwm->pwms[h].clk);
+	if (ret) {
+		dev_err(chip->dev, "Can't enable counter clock.\n");
+		return ret;
+	}
 
 	if (period_ns < 0)
 		return -EINVAL;
@@ -146,11 +157,10 @@ static int cadence_pwm_config(struct pwm_chip *chip,
 		counter_ctrl | CPWM_COUNTER_CTRL_COUNTING_DISABLE);
 
 	/* Calculate period, prescaler and set clock control register */
-	period_clocks =
-		div64_u64(
-			((int64_t) period_ns * (int64_t) cpwm->pwms[h].clk_hz),
-			1000000000LL);
-	
+	period_clocks = div64_u64(
+		((int64_t)period_ns * (int64_t)clk_get_rate(cpwm->pwms[h].clk)),
+		1000000000LL);
+
 	prescaler = ilog2(period_clocks) + 1 - 16;
 	if (prescaler < 0) prescaler = 0;
 
@@ -165,16 +175,15 @@ static int cadence_pwm_config(struct pwm_chip *chip,
 			CPWM_CLK_PRESCALE_MASK);
 	};
 
-	if (cpwm->pwms[h].source) x |= CPWM_CLK_SRC_EXTERNAL;
+	if (cpwm->pwms[h].useExternalClk) x |= CPWM_CLK_SRC_EXTERNAL;
 	else x &= ~CPWM_CLK_SRC_EXTERNAL;
 
 	cpwm_write(cpwm, h, CPWM_CLK_CTRL, x);
 
 	/* Calculate interval and set counter control value */
-	duty_clocks =
-		div64_u64(
-			((int64_t) duty_ns * (int64_t) cpwm->pwms[h].clk_hz),
-			1000000000LL);
+	duty_clocks = div64_u64(
+		((int64_t)duty_ns * (int64_t)clk_get_rate(cpwm->pwms[h].clk)),
+		1000000000LL);
 
 	cpwm_write(cpwm, h, CPWM_INTERVAL_COUNTER,
 		(period_clocks >> prescaler) & 0xffff);
@@ -210,6 +219,8 @@ static void cadence_pwm_disable(struct pwm_chip *chip, struct pwm_device *pwm)
 	x |= CPWM_COUNTER_CTRL_COUNTING_DISABLE |
 		CPWM_COUNTER_CTRL_WAVE_DISABLE;
 	cpwm_write(cpwm, h, CPWM_COUNTER_CTRL, x);
+
+	clk_disable_unprepare(cpwm->pwms[h].clk);
 }
 
 static int cadence_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm)
@@ -217,14 +228,22 @@ static int cadence_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 	struct cadence_pwm_chip *cpwm = cadence_pwm_get(chip);
 	int h = pwm->hwpwm;
 	uint32_t x;
+	int ret;
 
 	dev_dbg(chip->dev, "enabling");
+
+	ret = clk_prepare_enable(cpwm->pwms[h].clk);
+	if (ret) {
+		dev_err(chip->dev, "Can't enable counter clock.\n");
+		return ret;
+	}
 
 	x = cpwm_read(cpwm, h, CPWM_COUNTER_CTRL);
 	x &= ~(CPWM_COUNTER_CTRL_COUNTING_DISABLE |
 		CPWM_COUNTER_CTRL_WAVE_DISABLE);
 	x |= CPWM_COUNTER_CTRL_RESET;
 	cpwm_write(cpwm, h, CPWM_COUNTER_CTRL, x);
+	
 	return 0;
 }
 
@@ -240,10 +259,7 @@ static int cadence_pwm_probe(struct platform_device *pdev)
 	struct cadence_pwm_chip *cpwm;
 	struct resource *r_mem;
 	int ret;
-	struct device_node *node = pdev->dev.of_node;
-	const __be32 *value;
-	int rlen;
-	char propname[24];
+	char clockname[8];
 	int i;
 	struct cadence_pwm_pwm *pwm;
 
@@ -256,33 +272,44 @@ static int cadence_pwm_probe(struct platform_device *pdev)
 	if (IS_ERR(cpwm->base))
 		return PTR_ERR(cpwm->base);
 
+	//Try to get system clock
+	cpwm->system_clk = devm_clk_get(&pdev->dev, "system_clk");
+	if (IS_ERR(cpwm->system_clk))
+	  //Get the default clock
+	  cpwm->system_clk = devm_clk_get(&pdev->dev, NULL);
+
+	if (IS_ERR(cpwm->system_clk)){
+	  dev_err(&pdev->dev, "Missing device clock");
+	  return -ENODEV;
+	}
+
+	ret = clk_prepare_enable(cpwm->system_clk);
+	if (ret) {
+		dev_err(&pdev->dev, "Can't enable device clock.\n");
+		return ret;
+	}
+	
 	for (i = 0; i < CPWM_NUM_PWM; i ++) {
 		pwm = cpwm->pwms + i;
+		snprintf(clockname, sizeof(clockname),
+			 "clock%d", i);
+		
+		//Try to get a dedicated clock
+		pwm->clk = devm_clk_get(&pdev->dev, clockname);
+		if (IS_ERR(pwm->clk))
+		  //Get the default clock
+		  pwm->clk = devm_clk_get(&pdev->dev, NULL);
 
-		snprintf(propname, sizeof(propname),
-			"xlnx,ttc-clk%d-freq-hz", i);
-
-		value = of_get_property(node, propname, &rlen);
-		if (value)
-			pwm->clk_hz = be32_to_cpup(value);
-		else {
-			dev_err(&pdev->dev, "missing %s property", propname);
-			return -ENODEV;
+		if (IS_ERR(pwm->clk)){
+		  dev_err(&pdev->dev, "Missing clock source for counter %d", i);
+		  ret  = -ENODEV;
+		  goto disable_system_clk;
 		}
 
-		snprintf(propname, sizeof(propname),
-			"xlnx,ttc-clk%d-clksrc", i);
-
-		value = of_get_property(node, propname, &rlen);
-		if (value)
-			pwm->source = be32_to_cpup(value);
-		else {
-			dev_err(&pdev->dev, "missing %s property", propname);
-			return -ENODEV;
-		}
-
-		dev_info(&pdev->dev, "PWM %d has clock source %d at %d Hz",
-				i, pwm->source, pwm->clk_hz);
+		if( clk_is_match(pwm->clk, cpwm->system_clk) )
+		  pwm->useExternalClk = false;
+		else
+		  pwm->useExternalClk = true;
 	}
 
 	cpwm->chip.dev = &pdev->dev;
@@ -293,11 +320,15 @@ static int cadence_pwm_probe(struct platform_device *pdev)
 	ret = pwmchip_add(&cpwm->chip);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "cannot add pwm chip (error %d)", ret);
-		return ret;
+		goto disable_system_clk;
 	}
 
 	platform_set_drvdata(pdev, cpwm);
 	return 0;
+
+disable_system_clk:
+	clk_disable_unprepare(cpwm->system_clk);
+	return ret;
 }
 
 static int cadence_pwm_remove(struct platform_device *pdev)
@@ -307,6 +338,8 @@ static int cadence_pwm_remove(struct platform_device *pdev)
 
 	for (i = 0; i < cpwm->chip.npwm; i ++)
 		pwm_disable(&cpwm->chip.pwms[i]);
+
+	clk_disable_unprepare(cpwm->system_clk);
 
 	return pwmchip_remove(&cpwm->chip);
 }
