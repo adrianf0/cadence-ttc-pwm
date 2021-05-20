@@ -83,6 +83,7 @@ counter value equals one of the Match registers." [UG585] */
 struct cadence_pwm_pwm {
 	struct clk *clk; // associated clock
 	bool useExternalClk; // internal/external clock switch
+	enum pwm_polarity polarity;
 };
 
 struct cadence_pwm_chip {
@@ -193,11 +194,15 @@ static int cadence_pwm_config(struct pwm_chip *chip,
 	/* Restore counter */
 	counter_ctrl &=
 		~CPWM_COUNTER_CTRL_DECREMENT_ENABLE;
-	counter_ctrl |=
-		CPWM_COUNTER_CTRL_INTERVAL_ENABLE |
-		CPWM_COUNTER_CTRL_RESET |
-		CPWM_COUNTER_CTRL_MATCH_ENABLE |
-		CPWM_COUNTER_CTRL_WAVE_POL;
+	counter_ctrl |= CPWM_COUNTER_CTRL_INTERVAL_ENABLE |
+			CPWM_COUNTER_CTRL_RESET |
+			CPWM_COUNTER_CTRL_MATCH_ENABLE;
+
+	if(cpwm->pwms[h].polarity ==  PWM_POLARITY_NORMAL)
+		counter_ctrl |= CPWM_COUNTER_CTRL_WAVE_POL;
+	else
+		counter_ctrl &= ~CPWM_COUNTER_CTRL_WAVE_POL;
+
 	cpwm_write(cpwm, h, CPWM_COUNTER_CTRL, counter_ctrl);
 
 	dev_dbg(chip->dev,
@@ -247,10 +252,19 @@ static int cadence_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 	return 0;
 }
 
+static int cadence_set_polarity(struct pwm_chip *chip, struct pwm_device *pwm, enum pwm_polarity polarity){
+ 	struct cadence_pwm_chip *cpwm = cadence_pwm_get(chip);
+	int h = pwm->hwpwm;
+	cpwm->pwms[h].polarity = polarity;
+	return 0;
+}
+
+
 static const struct pwm_ops cadence_pwm_ops = {
 	.config = cadence_pwm_config,
 	.enable = cadence_pwm_enable,
 	.disable = cadence_pwm_disable,
+	.set_polarity =  cadence_set_polarity,
 	.owner = THIS_MODULE,
 };
 
@@ -310,6 +324,8 @@ static int cadence_pwm_probe(struct platform_device *pdev)
 		  pwm->useExternalClk = false;
 		else
 		  pwm->useExternalClk = true;
+
+		pwm->polarity = PWM_POLARITY_NORMAL;
 	}
 
 	cpwm->chip.dev = &pdev->dev;
