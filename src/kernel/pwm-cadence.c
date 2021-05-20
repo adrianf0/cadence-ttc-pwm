@@ -333,8 +333,7 @@ static int __init cadence_pwm_init(void)
 {
 	int ret;
 
-	printk(KERN_INFO "cadence_pwm: Compiled on "
-		__DATE__ " at " __TIME__ "\n");
+	printk(KERN_INFO "cadence_pwm init");
 	ret = platform_driver_register(&cadence_pwm_driver);
 	return ret;
 }
