@@ -313,7 +313,7 @@ static int cadence_pwm_remove(struct platform_device *pdev)
 
 static const struct of_device_id cadence_pwm_of_match[] = {
 	{ .compatible = "xlnx,ps7-ttc-1.00.a" },
-	{ .compatible = "cdns,ttc" },
+	{ .compatible = "cdns,ttcpwm" },
 	{},
 };
 
